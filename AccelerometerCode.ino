@@ -13,6 +13,8 @@ All rights reserved.</center></h2>
 
 extern "C" {
 #include <iis2dh_reg.h>
+#include <arm_math.h>
+}
 }
 
 // Config Defines
@@ -29,7 +31,7 @@ extern "C" {
 int32_t platform_write(void *handle, uint8_t Reg, const uint8_t *Bufp, uint16_t len);
 int32_t platform_read(void *handle, uint8_t Reg, uint8_t *Bufp, uint16_t len);
 
-IIS2DH_ctx_t dev_ctx; /** xxxxxxx is the used part number **/
+iis2dh_ctx_t dev_ctx; /** xxxxxxx is the used part number **/
 dev_ctx.write_reg = platform_write;
 dev_ctx.read_reg = platform_read;
 }
@@ -174,33 +176,34 @@ void setupSPI(){
   iis2dh_fifo_mode_set(&dev_ctx, IIS2DH_DYNAMIC_STREAM_MODE);
   /* Enable FIFO */
   iis2dh_fifo_set(&dev_ctx, PROPERTY_ENABLE);
-
 }
 
-void readNewData(){
-  // TODO
+// Take in readings, write to newReadings array
+void readNewData(float* newReadings){
   uint8_t flags;
-  uint8_t num = 0;
+  uint8_t numDataAvail = 0;
   /* Check if FIFO level over threshold */
   iis2dh_fifo_fth_flag_get(&dev_ctx, &flags);
+  int16_t data_raw_acceleration[3]; 
 
-  if (flags) {
-    /* Read number of sample in FIFO */
-    iis2dh_fifo_data_level_get(&dev_ctx, &num);
+  for(uint16_t numDataRead = 0; numDataRead < samples; numDataRead++){
+    if (flags) {
+      /* Read number of sample in FIFO */
+      iis2dh_fifo_data_level_get(&dev_ctx, &numDataAvail);
+      while (numDataAvail-- > 0) {
+        /* Read XL samples */
+        iis2dh_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
+        acceleration_mg[0] =
+          iis2dh_from_fs2_hr_to_mg(data_raw_acceleration[0]);
+        acceleration_mg[1] =
+          iis2dh_from_fs2_hr_to_mg(data_raw_acceleration[1]);
+        acceleration_mg[2] =
+          iis2dh_from_fs2_hr_to_mg(data_raw_acceleration[2]);
+      }
 
-    while (num-- > 0) {
-      /* Read XL samples */
-      iis2dh_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
-      acceleration_mg[0] =
-        iis2dh_from_fs2_hr_to_mg(data_raw_acceleration[0]);
-      acceleration_mg[1] =
-        iis2dh_from_fs2_hr_to_mg(data_raw_acceleration[1]);
-      acceleration_mg[2] =
-        iis2dh_from_fs2_hr_to_mg(data_raw_acceleration[2]);
-      sprintf((char *)tx_buffer,
-              "Acceleration [mg]:%4.2f\t%4.2f\t%4.2f\r\n",
-              acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
-      tx_com(tx_buffer, strlen((char const *)tx_buffer));
+      // Write magnitude to newReadings
+      arm_power_f32(data_raw_acceleration, 3, &newReadings[numDataRead]); // Sum of squares
+      arm_sqrt_f32( newReadings[numDataRead], &newReadings[numDataRead]); // Sqrt
     }
   }
 }
@@ -230,6 +233,7 @@ extern "C" {
       SPI.transfer(bufP[i]);
     }
     SPI.endTransaction();
+    return 0;
   }
   int32_t platform_read(void *handle, uint8_t Reg, uint8_t *Bufp, uint16_t len){
     SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE2));
@@ -237,5 +241,6 @@ extern "C" {
       bufP[i] = SPI.transfer();
     }
     SPI.endTransaction();
+    return 0;
   }
 }
