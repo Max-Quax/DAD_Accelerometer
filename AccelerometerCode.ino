@@ -10,31 +10,34 @@ All rights reserved.</center></h2>
 
 #include "arduinoFFT.h"
 #include "SparkFun_SinglePairEthernet.h"
+#include "SPI.h"
 
 extern "C" {
-#include <iis2dh_reg.h>
-#include <arm_math.h>
-}
+#include "iis2dh_reg.h"
+#include "arm_math.h"
 }
 
 // Config Defines
 // #define DEBUG_MODE
 
-#ifndef DEBUG_MODE
+// #ifndef DEBUG_MODE
 #define ChipSelPin CS
 #define InterruptPin G1
 #define ResetPin G0
-#endif
+#define BOOT_TIME 5 //ms
+#define SENSOR_BUS SPI
+// #endif
 
 // // Sensor driver setup
 extern "C" {
 int32_t platform_write(void *handle, uint8_t Reg, const uint8_t *Bufp, uint16_t len);
 int32_t platform_read(void *handle, uint8_t Reg, uint8_t *Bufp, uint16_t len);
-
-iis2dh_ctx_t dev_ctx; /** xxxxxxx is the used part number **/
-dev_ctx.write_reg = platform_write;
-dev_ctx.read_reg = platform_read;
+stmdev_ctx_t dev_ctx; 
+static uint8_t whoamI;
+static uint8_t tx_buffer[1000];
+static float acceleration_mg[3];
 }
+
 
 // SPE driver setup
 SinglePairEthernet adin1110;
@@ -56,7 +59,7 @@ void setup() {
   Serial.begin(9600);
 #endif
   setupSPI();
-
+  
   pinMode(LED_BUILTIN, OUTPUT);
   analogReadResolution(8);
   delay(500);
@@ -89,20 +92,8 @@ void loop() {
 }
 
 void collectData() {
+  // TODO
   
-  
-  // for (int i = 0; i < samples; i++) {
-  //   vImag[i] = 0;
-  // }
-  // long int delay1, delay2, delay3, delay4;
-  // for (int i = 0; i < samples; i++) {
-  //   vReal[i] = analogRead(A0);
-  //   delayMicroseconds(19);
-  //   delay1++;
-  //   delay2++;
-  //   delay3++;
-  //   delay4++;
-  // }
 }
 
 void calculateFFT() {
@@ -138,13 +129,10 @@ void sendSensData() {
 // TODO SPI Setup
 void setupSPI(){
 
-  /* Initialize mems driver interface */
-  //dev_ctx.handle = &SENSOR_BUS;
-  /* Initialize platform specific hardware */
-  //platform_init();
-  /* Wait sensor boot time */
-  platform_delay(BOOT_TIME);
-  /* Check device ID */
+  /** xxxxxxx is the used part number **/
+  dev_ctx.write_reg = platform_write;
+  dev_ctx.read_reg = platform_read;
+  dev_ctx.handle = &SENSOR_BUS;
   iis2dh_device_id_get(&dev_ctx, &whoamI);
 
   if (whoamI != IIS2DH_ID) {
@@ -176,6 +164,7 @@ void setupSPI(){
   iis2dh_fifo_mode_set(&dev_ctx, IIS2DH_DYNAMIC_STREAM_MODE);
   /* Enable FIFO */
   iis2dh_fifo_set(&dev_ctx, PROPERTY_ENABLE);
+
 }
 
 // Take in readings, write to newReadings array
@@ -202,7 +191,9 @@ void readNewData(float* newReadings){
       }
 
       // Write magnitude to newReadings
-      arm_power_f32(data_raw_acceleration, 3, &newReadings[numDataRead]); // Sum of squares
+      //arm_power_f32(data_raw_acceleration, 3, &newReadings[numDataRead]); // Sum of squares
+      newReadings[numDataRead] = data_raw_acceleration[0]*data_raw_acceleration[0] + 
+      data_raw_acceleration[1] * data_raw_acceleration[1] + data_raw_acceleration[2] * data_raw_acceleration[2];
       arm_sqrt_f32( newReadings[numDataRead], &newReadings[numDataRead]); // Sqrt
     }
   }
@@ -230,17 +221,17 @@ extern "C" {
  
     SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE2));
     for(int i = 0; i < len; i++){
-      SPI.transfer(bufP[i]);
+      SPI.transfer(Bufp[i]);
     }
     SPI.endTransaction();
-    return 0;
+    return 1;
   }
+
+
   int32_t platform_read(void *handle, uint8_t Reg, uint8_t *Bufp, uint16_t len){
     SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE2));
-    for(int i = 0; i < len; i++){
-      bufP[i] = SPI.transfer();
-    }
+    SPI.transferOut(Bufp, len);
     SPI.endTransaction();
-    return 0;
+    return 1;
   }
 }
