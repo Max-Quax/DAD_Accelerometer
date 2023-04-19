@@ -34,7 +34,6 @@ int32_t platform_write(void *handle, uint8_t Reg, const uint8_t *Bufp, uint16_t 
 int32_t platform_read(void *handle, uint8_t Reg, uint8_t *Bufp, uint16_t len);
 stmdev_ctx_t dev_ctx; 
 static uint8_t whoamI;
-static uint8_t tx_buffer[1000];
 static float acceleration_mg[3];
 }
 
@@ -103,12 +102,14 @@ void calculateFFT() {
   FFT.Windowing(FFT_WIN_TYP_HAMMING, FFT_FORWARD); /* Weigh data */
   FFT.Compute(FFT_FORWARD);                        /* Compute FFT */
   FFT.ComplexToMagnitude();                        /* Compute magnitudes */
+
+
 }
 
 void sendSensData() {
-  for (int i = 0; i < samples/2; i++) {
-    outputBuffer[i] = (byte)vReal[i];
-
+  memset(outputBuffer, 0, samples / 2);
+  for (int i = 0; i < samples/2; i = i + 2) {
+    outputBuffer[i] = (byte)((vReal[i] + vReal[i + 1]) / 2);
 #ifdef DEBUG_MODE
     Serial.print(outputBuffer[i]);
     Serial.print(" ");
@@ -196,6 +197,7 @@ void readNewData(float* newReadings){
       newReadings[numDataRead] = data_raw_acceleration[0]*data_raw_acceleration[0] + 
       data_raw_acceleration[1] * data_raw_acceleration[1] + data_raw_acceleration[2] * data_raw_acceleration[2];
       arm_sqrt_f32( newReadings[numDataRead], &newReadings[numDataRead]); // Sqrt
+
       vReal[numDataRead] = newReadings[numDataRead]; 
     }
   }
