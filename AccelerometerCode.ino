@@ -93,7 +93,8 @@ void loop() {
 
 void collectData() {
   // TODO
-  
+  float* readings;
+  readNewData(readings);
 }
 
 void calculateFFT() {
@@ -195,6 +196,7 @@ void readNewData(float* newReadings){
       newReadings[numDataRead] = data_raw_acceleration[0]*data_raw_acceleration[0] + 
       data_raw_acceleration[1] * data_raw_acceleration[1] + data_raw_acceleration[2] * data_raw_acceleration[2];
       arm_sqrt_f32( newReadings[numDataRead], &newReadings[numDataRead]); // Sqrt
+      vReal[numDataRead] = newReadings[numDataRead]; 
     }
   }
 }
